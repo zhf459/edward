@@ -640,14 +640,14 @@ def build_reparam_loss_and_gradients(inference, var_list):
       if isinstance(x, RandomVariable):
         if isinstance(qx, RandomVariable):
           qx_copy = copy(qx, scope=scope)
-          dict_swap[x] = qx_copy.value()
+          dict_swap[x] = qx_copy.value
         else:
           dict_swap[x] = qx
 
     for z, qz in six.iteritems(inference.latent_vars):
       # Copy q(z) to obtain new set of posterior samples.
       qz_copy = copy(qz, scope=scope)
-      dict_swap[z] = qz_copy.value()
+      dict_swap[z] = qz_copy.value
       q_log_prob[s] += tf.reduce_sum(
           inference.scale.get(z, 1.0) * qz_copy.log_prob(dict_swap[z]))
 
@@ -708,14 +708,14 @@ def build_reparam_kl_loss_and_gradients(inference, var_list):
       if isinstance(x, RandomVariable):
         if isinstance(qx, RandomVariable):
           qx_copy = copy(qx, scope=scope)
-          dict_swap[x] = qx_copy.value()
+          dict_swap[x] = qx_copy.value
         else:
           dict_swap[x] = qx
 
     for z, qz in six.iteritems(inference.latent_vars):
       # Copy q(z) to obtain new set of posterior samples.
       qz_copy = copy(qz, scope=scope)
-      dict_swap[z] = qz_copy.value()
+      dict_swap[z] = qz_copy.value
 
     for x in six.iterkeys(inference.data):
       if isinstance(x, RandomVariable):
@@ -771,14 +771,14 @@ def build_reparam_entropy_loss_and_gradients(inference, var_list):
       if isinstance(x, RandomVariable):
         if isinstance(qx, RandomVariable):
           qx_copy = copy(qx, scope=scope)
-          dict_swap[x] = qx_copy.value()
+          dict_swap[x] = qx_copy.value
         else:
           dict_swap[x] = qx
 
     for z, qz in six.iteritems(inference.latent_vars):
       # Copy q(z) to obtain new set of posterior samples.
       qz_copy = copy(qz, scope=scope)
-      dict_swap[z] = qz_copy.value()
+      dict_swap[z] = qz_copy.value
 
     for z in six.iterkeys(inference.latent_vars):
       z_copy = copy(z, dict_swap, scope=scope)
@@ -833,14 +833,14 @@ def build_score_loss_and_gradients(inference, var_list):
       if isinstance(x, RandomVariable):
         if isinstance(qx, RandomVariable):
           qx_copy = copy(qx, scope=scope)
-          dict_swap[x] = qx_copy.value()
+          dict_swap[x] = qx_copy.value
         else:
           dict_swap[x] = qx
 
     for z, qz in six.iteritems(inference.latent_vars):
       # Copy q(z) to obtain new set of posterior samples.
       qz_copy = copy(qz, scope=scope)
-      dict_swap[z] = qz_copy.value()
+      dict_swap[z] = qz_copy.value
       q_log_prob[s] += tf.reduce_sum(
           inference.scale.get(z, 1.0) *
           qz_copy.log_prob(tf.stop_gradient(dict_swap[z])))
@@ -904,14 +904,14 @@ def build_score_kl_loss_and_gradients(inference, var_list):
       if isinstance(x, RandomVariable):
         if isinstance(qx, RandomVariable):
           qx_copy = copy(qx, scope=scope)
-          dict_swap[x] = qx_copy.value()
+          dict_swap[x] = qx_copy.value
         else:
           dict_swap[x] = qx
 
     for z, qz in six.iteritems(inference.latent_vars):
       # Copy q(z) to obtain new set of posterior samples.
       qz_copy = copy(qz, scope=scope)
-      dict_swap[z] = qz_copy.value()
+      dict_swap[z] = qz_copy.value
       q_log_prob[s] += tf.reduce_sum(
           inference.scale.get(z, 1.0) *
           qz_copy.log_prob(tf.stop_gradient(dict_swap[z])))
@@ -975,14 +975,14 @@ def build_score_entropy_loss_and_gradients(inference, var_list):
       if isinstance(x, RandomVariable):
         if isinstance(qx, RandomVariable):
           qx_copy = copy(qx, scope=scope)
-          dict_swap[x] = qx_copy.value()
+          dict_swap[x] = qx_copy.value
         else:
           dict_swap[x] = qx
 
     for z, qz in six.iteritems(inference.latent_vars):
       # Copy q(z) to obtain new set of posterior samples.
       qz_copy = copy(qz, scope=scope)
-      dict_swap[z] = qz_copy.value()
+      dict_swap[z] = qz_copy.value
       q_log_prob[s] += tf.reduce_sum(
           inference.scale.get(z, 1.0) *
           qz_copy.log_prob(tf.stop_gradient(dict_swap[z])))
@@ -1054,14 +1054,14 @@ def build_score_rb_loss_and_gradients(inference, var_list):
       if isinstance(x, RandomVariable):
         if isinstance(qx, RandomVariable):
           qx_copy = copy(qx, scope=scope)
-          dict_swap[x] = qx_copy.value()
+          dict_swap[x] = qx_copy.value
         else:
           dict_swap[x] = qx
 
     for z, qz in six.iteritems(inference.latent_vars):
       # Copy q(z) to obtain new set of posterior samples.
       qz_copy = copy(qz, scope=scope)
-      dict_swap[z] = qz_copy.value()
+      dict_swap[z] = qz_copy.value
       q_log_probs[s][qz] = tf.reduce_sum(
           inference.scale.get(z, 1.0) *
           qz_copy.log_prob(tf.stop_gradient(dict_swap[z])))

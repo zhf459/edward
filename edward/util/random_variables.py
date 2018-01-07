@@ -173,13 +173,13 @@ def copy(org_instance, dict_swap=None, scope="copied",
       return org_instance
   elif isinstance(org_instance, tf.Tensor) and replace_itself:
     # Deal with case when `org_instance` is the associated tensor
-    # from the RandomVariable, e.g., `z.value()`. If
-    # `dict_swap={z: qz}`, we aim to swap it with `qz.value()`.
+    # from the RandomVariable, e.g., `z.value`. If
+    # `dict_swap={z: qz}`, we aim to swap it with `qz.value`.
     for key, value in six.iteritems(dict_swap):
       if isinstance(key, RandomVariable):
-        if org_instance == key.value():
+        if org_instance == key.value:
           if isinstance(value, RandomVariable):
-            org_instance = value.value()
+            org_instance = value.value
           else:
             org_instance = value
           if not copy_q:
@@ -413,7 +413,7 @@ def get_ancestors(x, collection=None):
   if collection is None:
     collection = random_variables()
 
-  node_dict = {node.value(): node for node in collection}
+  node_dict = {node.value: node for node in collection}
 
   # Traverse the graph. Add each node to the set if it's in the collection.
   output = set()
@@ -427,7 +427,7 @@ def get_ancestors(x, collection=None):
     visited.add(node)
 
     if isinstance(node, RandomVariable):
-      node = node.value()
+      node = node.value
 
     candidate_node = node_dict.get(node, None)
     if candidate_node is not None and candidate_node != x:
@@ -502,7 +502,7 @@ def get_children(x, collection=None):
   if collection is None:
     collection = random_variables()
 
-  node_dict = {node.value(): node for node in collection}
+  node_dict = {node.value: node for node in collection}
 
   # Traverse the graph. Add each node to the set if it's in the collection.
   output = set()
@@ -516,7 +516,7 @@ def get_children(x, collection=None):
     visited.add(node)
 
     if isinstance(node, RandomVariable):
-      node = node.value()
+      node = node.value
 
     candidate_node = node_dict.get(node, None)
     if candidate_node is not None and candidate_node != x:
@@ -555,7 +555,7 @@ def get_descendants(x, collection=None):
   if collection is None:
     collection = random_variables()
 
-  node_dict = {node.value(): node for node in collection}
+  node_dict = {node.value: node for node in collection}
 
   # Traverse the graph. Add each node to the set if it's in the collection.
   output = set()
@@ -569,7 +569,7 @@ def get_descendants(x, collection=None):
     visited.add(node)
 
     if isinstance(node, RandomVariable):
-      node = node.value()
+      node = node.value
 
     candidate_node = node_dict.get(node, None)
     if candidate_node is not None and candidate_node != x:
@@ -608,7 +608,7 @@ def get_parents(x, collection=None):
   if collection is None:
     collection = random_variables()
 
-  node_dict = {node.value(): node for node in collection}
+  node_dict = {node.value: node for node in collection}
 
   # Traverse the graph. Add each node to the set if it's in the collection.
   output = set()
@@ -622,7 +622,7 @@ def get_parents(x, collection=None):
     visited.add(node)
 
     if isinstance(node, RandomVariable):
-      node = node.value()
+      node = node.value
 
     candidate_node = node_dict.get(node, None)
     if candidate_node is not None and candidate_node != x:
@@ -705,7 +705,7 @@ def get_variables(x, collection=None):
     visited.add(node)
 
     if isinstance(node, RandomVariable):
-      node = node.value()
+      node = node.value
 
     candidate_node = node_dict.get(node.name, None)
     if candidate_node is not None and candidate_node != x:

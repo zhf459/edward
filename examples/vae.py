@@ -56,7 +56,7 @@ x_train_generator = generator(x_train, M)
 # Define a subgraph of the full model, corresponding to a minibatch of
 # size M.
 z = Normal(loc=tf.zeros([M, d]), scale=tf.ones([M, d]))
-hidden = Dense(256, activation='relu')(z.value())
+hidden = Dense(256, activation='relu')(z.value)
 x = Bernoulli(logits=Dense(28 * 28)(hidden))
 
 # INFERENCE
