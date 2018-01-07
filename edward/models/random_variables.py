@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import inspect as _inspect
 
+from edward.models.core import primitive_cls
 from edward.models.random_variable import RandomVariable as _RandomVariable
 from tensorflow.contrib import distributions as _distributions
 
@@ -16,7 +17,9 @@ for _name in sorted(dir(_distributions)):
           _candidate != _distributions.Distribution and
           issubclass(_candidate, _distributions.Distribution)):
 
-    # to use _candidate's docstring, must write a new __init__ method
+    # write a new __init__ method in order to decorate class as primitive
+    # and share _candidate's docstring
+    @primitive_cls
     def __init__(self, *args, **kwargs):
       _RandomVariable.__init__(self, *args, **kwargs)
     __init__.__doc__ = _candidate.__init__.__doc__
