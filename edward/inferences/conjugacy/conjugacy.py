@@ -12,7 +12,7 @@ from collections import defaultdict
 from edward.inferences.conjugacy.simplify \
     import symbolic_suff_stat, full_simplify, expr_contains, reconstruct_expr
 from edward.models.random_variables import *
-from edward.util import copy, get_blanket
+from edward.util import get_blanket
 
 
 def mvn_diag_from_natural_params(p1, p2):

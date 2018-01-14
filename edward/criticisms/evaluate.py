@@ -6,7 +6,6 @@ import numpy as np
 import six
 import tensorflow as tf
 
-from edward.inferences.inference import check_and_maybe_build_data
 from edward.models import RandomVariable
 from edward.util import compute_multinomial_mode, \
     with_binary_averaging
