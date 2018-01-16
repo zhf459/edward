@@ -8,7 +8,7 @@ import tensorflow as tf
 
 from edward.inferences.inference import check_and_maybe_build_data
 from edward.models import RandomVariable
-from edward.util import get_session, compute_multinomial_mode, \
+from edward.util import compute_multinomial_mode, \
     with_binary_averaging
 
 try:
@@ -98,6 +98,7 @@ def evaluate(metrics, data, n_samples=500, output_key=None, seed=None):
   ed.evaluate(('mean_squared_logarithmic_error', {'average': 'micro'}),
               data={y: y_data, x: x_data})
   """
+  # TODO get_session
   sess = get_session()
   if isinstance(metrics, str):
     metrics = [metrics]

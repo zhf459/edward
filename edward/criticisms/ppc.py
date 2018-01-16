@@ -9,7 +9,6 @@ import tensorflow as tf
 from edward.inferences.inference import (check_and_maybe_build_data,
     check_and_maybe_build_latent_vars)
 from edward.models import RandomVariable
-from edward.util import get_session
 
 
 def ppc(T, data, latent_vars=None, n_samples=100):
@@ -80,6 +79,7 @@ def ppc(T, data, latent_vars=None, n_samples=100):
   ed.ppc(T, data={x: x_train})
   ```
   """
+  # TODO get_session
   sess = get_session()
   if not callable(T):
     raise TypeError("T must be a callable function.")
