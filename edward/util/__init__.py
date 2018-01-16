@@ -29,7 +29,6 @@ _allowed_symbols = [
     'Progbar',
     'random_variables',
     'rbf',
-    'set_seed',
     'to_simplex',
     'transform',
     'with_binary_averaging'
