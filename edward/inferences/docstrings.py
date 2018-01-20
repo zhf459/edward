@@ -71,6 +71,13 @@ arg_align_latent = """
     as input and returns a string, indexing `variational`'s trace.
     Other inputs must return None.
 """[1:]
+arg_align_latent_monte_carlo = """
+  align_latent: function of string, aligning `model` latent
+    variables with posterior trace. It takes a model variable's name
+    as input and returns a string. The return output determines the
+    name of the returned dictionary of states' keys. If None,
+    will not perform inference over them.
+"""[1:]
 arg_args_kwargs = """
   args, kwargs: data inputs. `kwargs`' keys are directly the argument
     keys in `model` (and if present, `variational`). Data inputs are
@@ -128,10 +135,29 @@ arg_scale = """
     for mini-batch scaling when inferring global variables, or
     applying masks on a random variable.
 """[1:]
+arg_step_size = """
+  step_size: float, optional.
+    Step size of numerical integrator. The implementation may be
+    extended in the future to enable a step size per random variable
+    (`step_size` would be a callable).
+"""[1:]
 arg_variational = """
   variational: function whose inputs are a subset of `args` (e.g.,
     for amortized). Output is not used.
 """[1:]
+notes_conditional_inference = """
+In conditional inference, we infer $z$ in $p(z, \\beta
+\mid x)$ while fixing inference over $\\beta$ using another
+distribution $q(\\beta)$. During calculations, this function uses an
+estimate of the marginal density,
+
+$\log p(x, z) = \log \mathbb{E}_{q(\\beta)} [ p(x, z, \\beta) ]
+              \\approx \log p(x, z, \\beta^*)$
+
+leveraging a single Monte Carlo sample, where $\\beta^* \sim
+q(\\beta)$. This is unbiased (and therefore asymptotically exact as a
+pseudo-marginal method) if $q(\\beta) = p(\\beta \mid x)$.
+"""[1:-1]
 notes_conditional_inference_samples = """
 In conditional inference, we infer $z$ in $p(z, \\beta
 \mid x)$ while fixing inference over $\\beta$ using another
@@ -176,6 +202,11 @@ return_loss_surrogate_loss = """
   Pair of scalar tf.Tensors, representing the loss and surrogate loss
   respectively. The surrogate loss' automatic differentiation is the
   gradient to follow for optimization.
+"""[1:-1]
+return_samples = """
+  Dict of tf.Tensor. The keys are according to the return values of
+  `align_latent`. The associated values are the transitioned states
+  from the Markov chain.
 """[1:-1]
 return_surrogate_loss = """
   Scalar tf.Tensor representing the surrogate loss. Its automatic

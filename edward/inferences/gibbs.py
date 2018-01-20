@@ -8,17 +8,27 @@ import tensorflow as tf
 
 from collections import OrderedDict
 from edward.inferences.conjugacy import complete_conditional
-from edward.inferences.monte_carlo import MonteCarlo
-from edward.models import RandomVariable
-from edward.util import check_and_maybe_build_latent_vars, get_session
 
 
-class Gibbs(MonteCarlo):
+# TODO do we really need  gibbs and not just cycling complete
+# conditionals? (maybe for train()))?
+def gibbs(proposal=None, scan_order='random'):
   """Gibbs sampling [@geman1984stochastic].
 
-  Note `Gibbs` assumes the proposal distribution has the same
-  support as the prior. The `auto_transform` attribute in
-  the method `initialize()` is not applicable.
+  Args:
+    proposal:
+      Collection of random variables to perform inference on; each is
+      binded to its complete conditionals which Gibbs cycles draws on.
+        If not specified, default is to use `ed.complete_conditional`.
+    scan_order: list or str, optional.
+      The scan order for each Gibbs update. If list, it is the
+      deterministic order of latent variables. An element in the list
+      can be a `RandomVariable` or itself a list of
+      `RandomVariable`s (this defines a blocked Gibbs sampler). If
+      'random', will use a random order at each update.
+
+  TODO The function assumes the proposal distribution has the
+  same support as the prior. auto_transform does X.
 
   #### Examples
 
@@ -32,40 +42,11 @@ class Gibbs(MonteCarlo):
   inference = ed.Gibbs({p: qp}, data={x: x_data})
   ```
   """
-  def __init__(self, latent_vars, proposal_vars=None, data=None):
-    """Create an inference algorithm.
-
-    Args:
-      proposal_vars: dict of RandomVariable to RandomVariable, optional.
-        Collection of random variables to perform inference on; each is
-        binded to its complete conditionals which Gibbs cycles draws on.
-        If not specified, default is to use `ed.complete_conditional`.
-    """
-    if proposal_vars is None:
-      proposal_vars = {z: complete_conditional(z)
-                       for z in six.iterkeys(latent_vars)}
-    else:
-      proposal_vars = check_and_maybe_build_latent_vars(proposal_vars)
-
-    self.proposal_vars = proposal_vars
-    super(Gibbs, self).__init__(latent_vars, data)
-
-  def initialize(self, scan_order='random', *args, **kwargs):
-    """Initialize inference algorithm. It initializes hyperparameters
-    and builds ops for the algorithm's computation graph.
-
-    Args:
-      scan_order: list or str, optional.
-        The scan order for each Gibbs update. If list, it is the
-        deterministic order of latent variables. An element in the list
-        can be a `RandomVariable` or itself a list of
-        `RandomVariable`s (this defines a blocked Gibbs sampler). If
-        'random', will use a random order at each update.
-    """
-    self.scan_order = scan_order
-    self.feed_dict = {}
-    kwargs['auto_transform'] = False
-    return super(Gibbs, self).initialize(*args, **kwargs)
+  if proposal_vars is None:
+    proposal_vars = {z: complete_conditional(z)
+                     for z in six.iterkeys(latent_vars)}
+  else:
+    proposal_vars = check_and_maybe_build_latent_vars(proposal_vars)
 
   def update(self, feed_dict=None):
     """Run one iteration of sampling.
@@ -131,22 +112,3 @@ class Gibbs(MonteCarlo):
         self.train_writer.add_summary(summary, t)
 
     return {'t': t, 'accept_rate': accept_rate}
-
-  def build_update(self):
-    """
-    #### Notes
-
-    The updates assume each Empirical random variable is directly
-    parameterized by `tf.Variable`s.
-    """
-    # Update Empirical random variables according to the complete
-    # conditionals. We will feed the conditionals when calling `update()`.
-    assign_ops = []
-    for z, qz in six.iteritems(self.latent_vars):
-      variable = qz.get_variables()[0]
-      assign_ops.append(
-          tf.scatter_update(variable, self.t, self.proposal_vars[z]))
-
-    # Increment n_accept (if accepted).
-    assign_ops.append(self.n_accept.assign_add(1))
-    return tf.group(*assign_ops)

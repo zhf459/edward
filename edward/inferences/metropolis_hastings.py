@@ -5,158 +5,202 @@ from __future__ import print_function
 import six
 import tensorflow as tf
 
+from edward.models import Trace
+from edward.inferences import docstrings as doc
+from edward.inferences.inference import (
+    call_function_up_to_args, make_intercept)
 from collections import OrderedDict
-from edward.inferences.monte_carlo import MonteCarlo
-from edward.models import RandomVariable
-from edward.util import check_and_maybe_build_latent_vars
-
-try:
-  from edward.models import Uniform
-except Exception as e:
-  raise ImportError("{0}. Your TensorFlow version is not supported.".format(e))
 
 
-class MetropolisHastings(MonteCarlo):
+@doc.set_doc(
+    arg_model=doc.arg_model[:-1],
+    args=(doc.arg_align_latent_monte_carlo +
+          doc.arg_align_data +
+          doc.arg_auto_transform +
+          doc.arg_collections +
+          doc.arg_args_kwargs)[:-1],
+    returns=doc.return_samples,
+    notes_conditional_inference=doc.notes_conditional_inference)
+def metropolis_hastings(model, proposal, align_latent, align_data,
+                        auto_transform=True, collections=None, *args, **kwargs):
   """Metropolis-Hastings [@metropolis1953equation; @hastings1970monte].
+
+  It draws sample from the proposal given the last sample. The
+  accept or reject the sample is based on the ratio,
+
+  $\\text{ratio} =
+        \log p(x, z^{\\text{new}}) - \log p(x, z^{\\text{old}}) -
+        \log g(z^{\\text{new}} \mid z^{\\text{old}}) +
+        \log g(z^{\\text{old}} \mid z^{\\text{new}})$
+
+  Args:
+  {@arg_model}
+    proposal: function whose inputs are a subset of `args` (e.g.,
+      for amortized). Output is not used. Collection of random
+      variables to perform inference on; each is binded to a proposal
+      distribution $g(z' \mid z)$.
+  {@args}
 
   #### Notes
 
-  In conditional inference, we infer $z$ in $p(z, \\beta
-  \mid x)$ while fixing inference over $\\beta$ using another
-  distribution $q(\\beta)$.
-  To calculate the acceptance ratio, `MetropolisHastings` uses an
-  estimate of the marginal density,
+  @{notes_conditional_inference}
 
-  $p(x, z) = \mathbb{E}_{q(\\beta)} [ p(x, z, \\beta) ]
-            \\approx p(x, z, \\beta^*)$
-
-  leveraging a single Monte Carlo sample, where $\\beta^* \sim
-  q(\\beta)$. This is unbiased (and therefore asymptotically exact as a
-  pseudo-marginal method) if $q(\\beta) = p(\\beta \mid x)$.
-
-  `MetropolisHastings` assumes the proposal distribution has the same
-  support as the prior. The `auto_transform` attribute in
-  the method `initialize()` is not applicable.
+  TODO The function assumes the proposal distribution has the
+  same support as the prior. auto_transform does X.
 
   #### Examples
 
   ```python
-  mu = Normal(loc=0.0, scale=1.0)
-  x = Normal(loc=mu, scale=1.0, sample_shape=10)
+  def model():
+    mu = Normal(loc=0.0, scale=1.0, name="mu")
+    x = Normal(loc=mu, scale=1.0, sample_shape=10, name="x")
 
-  qmu = Empirical(tf.Variable(tf.zeros(500)))
-  proposal_mu = Normal(loc=mu, scale=0.5)
-  inference = ed.MetropolisHastings({mu: qmu}, {mu: proposal_mu},
-                                    data={x: np.zeros(10, dtype=np.float32)})
+  def proposal(mu):
+    qmu = Normal(loc=mu, scale=0.5, name="qmu")
+
+  samples = ed.metropolis_hastings(
+      model, proposal,
+      align_latent=lambda name: "qmu" if name == "mu" else None,
+      align_data=lambda name: "x_data" if name == "x" else None,
+      x_data=x_data)
   ```
   """
-  def __init__(self, latent_vars, proposal_vars, data=None):
-    """Create an inference algorithm.
+  # Trace one execution of model to collect states. The list of states
+  # (and order) may vary across executions.
+  with Trace() as model_trace:
+    call_function_up_to_args(model, *args, **kwargs)
+  states = []
+  for name, node in six.iteritems(model_trace):
+    if align_latent(name) is not None:
+      z = node.value
+      states.append(z)
 
-    Args:
-      proposal_vars: dict of RandomVariable to RandomVariable.
-        Collection of random variables to perform inference on; each is
-        binded to a proposal distribution $g(z' \mid z)$.
+  def _target_log_prob_fn(*fargs):
+    """Target's unnormalized log-joint density as a function of states."""
+    posterior_trace = {align_latent(state.name): arg
+                       for state, arg in zip(states, fargs)}
+    intercept = make_intercept(
+        posterior_trace, align_data, align_latent, args, kwargs)
+    with Trace(intercept=intercept) as model_trace:
+      # Note program may not run into same list of states. For newly
+      # unseen states, program uses them as is; for states that are
+      # passed-in but unseen, program doesn't use them.
+      call_function_up_to_args(model, *args, **kwargs)
+
+    p_log_prob = 0.0
+    for name, node in six.iteritems(model_trace):
+      rv = node.value
+      p_log_prob += tf.reduce_sum(rv.log_prob(rv.value))
+    return p_log_prob
+
+  def _proposal_fn(*fargs):
+    """Takes inputted states and returns (proposed states, log Hastings ratio).
+
+    This implementation doesn't let `proposal take *args, **kwargs as
+    input (i.e., it cannot be amortized). We also assume proposal
+    returns same size and order as inputted states.
     """
-    proposal_vars = check_and_maybe_build_latent_vars(proposal_vars)
-    self.proposal_vars = proposal_vars
-    super(MetropolisHastings, self).__init__(latent_vars, data)
+    with Trace() as new_trace:
+      # Build g(new | old) with newly drawn states given inputted ones.
+      call_function_up_to_args(proposal, *fargs)
+    new_states = [new_trace[align_latent(state.name)] for state in states]
+    old_states_trace = {align_latent(state.name): arg
+                        for state, arg in zip(states, fargs)}
+    intercept = make_intercept(
+        old_states_trace, align_data, align_latent, args, kwargs)
+    with Trace(intercept=intercept) as old_trace:
+      # Build g(old | new) where all rv values are set to old states.
+      call_function_up_to_args(proposal, *new_states)
+    # Compute log p(old | new) - log p(new | old).
+    log_hastings_ratio = 0.0
+    for state in states:
+      old_state = old_trace[align_latent(state.name)].value
+      new_state = new_trace[align_latent(state.name)].value
+      log_hastings_ratio += tf.reduce_sum(old_state.log_prob(old_state.value))
+      log_hastings_ratio -= tf.reduce_sum(new_state.log_prob(new_state.value))
+    return new_states, log_hastings_ratio
 
-  def initialize(self, *args, **kwargs):
-    kwargs['auto_transform'] = False
-    return super(MetropolisHastings, self).initialize(*args, **kwargs)
+  # TODO independent_chain_ndims
+  # TODO target_log_prob and previous sample to plug in?
+  next_states = _metropolis_hastings_kernel(
+      target_log_prob_fn=_target_log_prob_fn,
+      proposal_fn=_proposal_fn,
+      states=states,
+      target_log_prob=target_log_prob)
+  return {align_latent(state.name): next_state
+          for state, next_state in zip(states, next_states)}
 
-  def build_update(self):
-    """Draw sample from proposal conditional on last sample. Then
-    accept or reject the sample based on the ratio,
 
-    $\\text{ratio} =
-          \log p(x, z^{\\text{new}}) - \log p(x, z^{\\text{old}}) -
-          \log g(z^{\\text{new}} \mid z^{\\text{old}}) +
-          \log g(z^{\\text{old}} \mid z^{\\text{new}})$
+def _metropolis_hastings_kernel(target_log_prob_fn,
+                                proposal_fn,
+                                states,
+                                independent_chain_ndims=0,
+                                return_additional_state=False,
+                                target_log_prob=None,
+                                seed=None,
+                                name=None):
+  """Runs one iteration of Metropolis-Hastings.
 
-    #### Notes
+  Args:
+    states: list of `Tensor`s each representing part of the
+      chain's state.
+    target_log_prob_fn: Python callable which takes an argument like
+      `*state_tensors` (i.e., Python expanded) and returns the target
+      distribution's (possibly unnormalized) log-density. Output has
+      same shape as `target_log_prob`.
+    proposal_fn: Python callable which takes an argument like
+      `*state_tensors` (i.e., Python expanded) and returns a tuple of
+      a list of proposed states of same size as input, and a log
+      Hastings ratio `Tensor` of same shape as `target_log_prob`. If
+      proposal is symmetric, set the second value to `None` to enable
+      more efficient computation than explicitly supplying a tensor of
+      zeros.
+    independent_chain_ndims: Scalar `int` `Tensor` representing the number of
+      leading dimensions (in each state) which index independent chains.
+      Default value: `0` (i.e., only one chain).
+    return_additional_state: Boolean determining whether to return
+      additional state information.
+    target_log_prob: `Tensor` of shape (independent_chain_dims,) if
+      independent_chain_ndims == 1 else ().
+    seed: A Python integer. Used to create a random seed for the distribution.
+      See
+      @{tf.set_random_seed}
+      for behavior.
+    name: A name of the operation (optional).
+  """
+  with tf.name_scope(name, "_metropolis_hastings_kernel", states):
+    with tf.name_scope("init"):
+      if target_log_prob is None:
+        target_log_prob = target_log_prob_fn(*states)
+    proposed_states, log_hastings_ratio = proposal_fn(*states)
+    if log_hastings_ratio is None:
+      # Assume proposal is symmetric so log Hastings ratio is zero,
+      # log p(old | new) - log p(new | old) = 0.
+      log_hastings_ratio = 0.
 
-    The updates assume each Empirical random variable is directly
-    parameterized by `tf.Variable`s.
-    """
-    old_sample = {z: tf.gather(qz.params, tf.maximum(self.t - 1, 0))
-                  for z, qz in six.iteritems(self.latent_vars)}
-    old_sample = OrderedDict(old_sample)
+    target_log_prob_proposed_states = target_log_prob_fn(proposed_states)
 
-    # Form dictionary in order to replace conditioning on prior or
-    # observed variable with conditioning on a specific value.
-    dict_swap = {}
-    for x, qx in six.iteritems(self.data):
-      if isinstance(x, RandomVariable):
-        if isinstance(qx, RandomVariable):
-          qx_copy = copy(qx, scope='conditional')
-          dict_swap[x] = qx_copy.value
-        else:
-          dict_swap[x] = qx
+    with tf.name_scope(
+            "accept_reject",
+            states + [target_log_prob, target_log_prob_proposed_states]):
+      log_accept_prob = (target_log_prob_proposed_states - target_log_prob +
+                         log_hastings_ratio)
+      log_draws = tf.log(tf.random_uniform(tf.shape(log_accept_prob),
+                                           seed=seed,
+                                           dtype=log_accept_prob.dtype))
+      is_proposal_accepted = log_draws < log_accept_prob
+      next_states = [tf.where(is_proposal_accepted, proposed_state, state)
+                     for proposed_state, state in zip(proposed_states, states)]
 
-    dict_swap_old = dict_swap.copy()
-    dict_swap_old.update(old_sample)
-    base_scope = tf.get_default_graph().unique_name("inference") + '/'
-    scope_old = base_scope + 'old'
-    scope_new = base_scope + 'new'
+    if not return_additional_state:
+      return next_states
 
-    # Draw proposed sample and calculate acceptance ratio.
-    new_sample = old_sample.copy()  # copy to ensure same order
-    ratio = 0.0
-    for z, proposal_z in six.iteritems(self.proposal_vars):
-      # Build proposal g(znew | zold).
-      proposal_znew = copy(proposal_z, dict_swap_old, scope=scope_old)
-      # Sample znew ~ g(znew | zold).
-      new_sample[z] = proposal_znew.value
-      # Increment ratio.
-      ratio -= tf.reduce_sum(proposal_znew.log_prob(new_sample[z]))
-
-    dict_swap_new = dict_swap.copy()
-    dict_swap_new.update(new_sample)
-
-    for z, proposal_z in six.iteritems(self.proposal_vars):
-      # Build proposal g(zold | znew).
-      proposal_zold = copy(proposal_z, dict_swap_new, scope=scope_new)
-      # Increment ratio.
-      ratio += tf.reduce_sum(proposal_zold.log_prob(dict_swap_old[z]))
-
-    for z in six.iterkeys(self.latent_vars):
-      # Build priors p(znew) and p(zold).
-      znew = copy(z, dict_swap_new, scope=scope_new)
-      zold = copy(z, dict_swap_old, scope=scope_old)
-      # Increment ratio.
-      ratio += tf.reduce_sum(znew.log_prob(dict_swap_new[z]))
-      ratio -= tf.reduce_sum(zold.log_prob(dict_swap_old[z]))
-
-    for x in six.iterkeys(self.data):
-      if isinstance(x, RandomVariable):
-        # Build likelihoods p(x | znew) and p(x | zold).
-        x_znew = copy(x, dict_swap_new, scope=scope_new)
-        x_zold = copy(x, dict_swap_old, scope=scope_old)
-        # Increment ratio.
-        ratio += tf.reduce_sum(x_znew.log_prob(dict_swap[x]))
-        ratio -= tf.reduce_sum(x_zold.log_prob(dict_swap[x]))
-
-    # Accept or reject sample.
-    u = Uniform(low=tf.constant(0.0, dtype=ratio.dtype),
-                high=tf.constant(1.0, dtype=ratio.dtype)).sample()
-    accept = tf.log(u) < ratio
-    sample_values = tf.cond(accept, lambda: list(six.itervalues(new_sample)),
-                            lambda: list(six.itervalues(old_sample)))
-    if not isinstance(sample_values, list):
-      # `tf.cond` returns tf.Tensor if output is a list of size 1.
-      sample_values = [sample_values]
-
-    sample = {z: sample_value for z, sample_value in
-              zip(six.iterkeys(new_sample), sample_values)}
-
-    # Update Empirical random variables.
-    assign_ops = []
-    for z, qz in six.iteritems(self.latent_vars):
-      variable = qz.get_variables()[0]
-      assign_ops.append(tf.scatter_update(variable, self.t, sample[z]))
-
-    # Increment n_accept (if accepted).
-    assign_ops.append(self.n_accept.assign_add(tf.where(accept, 1, 0)))
-    return tf.group(*assign_ops)
+    next_log_prob = tf.where(is_proposal_accepted,
+                             target_log_prob_proposed_states,
+                             target_log_prob)
+    return [
+        next_states,
+        log_accept_prob,
+        next_log_prob,
+        proposed_states,
+    ]
